@@ -1,0 +1,35 @@
+sudo: required
+
+language: bash
+
+services:
+  - docker
+
+env:
+  global:
+    - DOCKER_IMAGE=pfragoso/flask-api
+
+stages:
+  - name: build
+    if: branch = master
+  - name: deploy
+    if: branch = master
+
+jobs:
+  include:
+    - stage: build
+      script:
+      - docker login --username "$DOCKER_USERNAME" --password "$DOCKER_PASSWORD"    
+      - docker build --rm --tag "$DOCKER_IMAGE":"$TRAVIS_COMMIT" .
+      - docker build --rm --tag "$DOCKER_IMAGE":latest .
+      - docker images
+      - docker network create app
+      - docker run --name redis --rm --detach -p 6379:6379 --network app redis
+      - docker run --name flask-api --rm --detach -p 5000:5000 --network app -e "REDIS_URL=redis://redis:6379/0" "$DOCKER_IMAGE":"$TRAVIS_COMMIT"
+      - docker ps
+      - sleep 20 
+      - curl -I http://127.0.0.1:5000/api/kubernetes
+      - docker push "$DOCKER_IMAGE":"$TRAVIS_COMMIT"  
+      - docker push "$DOCKER_IMAGE":latest  
+    - stage: deploy
+      script: ./scripts/deploy.sh
